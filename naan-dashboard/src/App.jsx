@@ -14,6 +14,37 @@ function formatDateTime(value) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
+function getTimestampMs(value) {
+  if (!value) return 0;
+
+  if (typeof value === "string" || typeof value === "number") {
+    const ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+
+  if (value?.toDate && typeof value.toDate === "function") {
+    const ms = value.toDate().getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+
+  if (value?.seconds != null) {
+    return value.seconds * 1000;
+  }
+
+  return 0;
+}
+
+function sortScansNewestFirst(items) {
+  return [...items].sort((a, b) => {
+    return getTimestampMs(b?.timestamp) - getTimestampMs(a?.timestamp);
+  });
+}
+
+function getLocationLabel(value) {
+  if (!value || value === "Unknown") return "Ahmedabad";
+  return value;
+}
+
 function getImageUrl(scan) {
   return (
     scan?.image_urls?.original?.download_url ||
@@ -297,7 +328,10 @@ function Modal({ scan, onClose }) {
                 label="Defect Types"
                 value={(scan.defect_types || []).join(", ") || "None"}
               />
-              <DetailRow label="Location" value={scan?.image_data?.factory_location} />
+              <DetailRow
+                label="Location"
+                value={getLocationLabel(scan?.image_data?.factory_location)}
+              />
               <DetailRow label="Camera" value={scan?.image_data?.camera} />
               <DetailRow label="Shift" value={scan?.image_data?.shift_time} />
               <DetailRow label="Mode" value={scan?.image_data?.input_mode} />
@@ -445,7 +479,7 @@ function ScanGridCard({ scan, onOpen }) {
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Location</div>
             <div className="mt-1 font-semibold text-slate-800">
-              {scan?.image_data?.factory_location || "-"}
+              {getLocationLabel(scan?.image_data?.factory_location)}
             </div>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
@@ -489,11 +523,13 @@ export default function App() {
           ...doc.data(),
         }));
 
-        if (data.length === 0) {
-          setScans(DUMMY_SCANS);
+        const sortedData = sortScansNewestFirst(data);
+
+        if (sortedData.length === 0) {
+          setScans(sortScansNewestFirst(DUMMY_SCANS));
           setUsingDummy(true);
         } else {
-          setScans(data);
+          setScans(sortedData);
           setUsingDummy(false);
         }
 
@@ -503,7 +539,7 @@ export default function App() {
       (err) => {
         console.error("Firestore error:", err);
         setError(err.message || "Failed to load inspections");
-        setScans(DUMMY_SCANS);
+        setScans(sortScansNewestFirst(DUMMY_SCANS));
         setUsingDummy(true);
         setLoading(false);
       }
@@ -514,7 +550,7 @@ export default function App() {
 
   const locations = useMemo(() => {
     const vals = Array.from(
-      new Set(scans.map((s) => s?.image_data?.factory_location).filter(Boolean))
+      new Set(scans.map((s) => getLocationLabel(s?.image_data?.factory_location)).filter(Boolean))
     );
     return ["All", ...vals];
   }, [scans]);
@@ -527,10 +563,10 @@ export default function App() {
   }, [scans]);
 
   const filteredScans = useMemo(() => {
-    return scans.filter((scan) => {
+    const result = scans.filter((scan) => {
       const locationOk =
         selectedLocation === "All" ||
-        scan?.image_data?.factory_location === selectedLocation;
+        getLocationLabel(scan?.image_data?.factory_location) === selectedLocation;
 
       const viewOk =
         selectedView === "All" ||
@@ -538,6 +574,8 @@ export default function App() {
 
       return locationOk && viewOk;
     });
+
+    return sortScansNewestFirst(result);
   }, [scans, selectedLocation, selectedView]);
 
   const total = filteredScans.length;
@@ -712,8 +750,8 @@ export default function App() {
               <h2 className="text-lg font-bold text-slate-800">Inspection Records</h2>
               <p className="mt-1 text-sm text-slate-500">
                 {viewMode === "grid"
-                  ? "Click any card to open complete scan details"
-                  : "Click any row to open complete scan details"}
+                  ? "Newest scans appear first. Click any card to open complete scan details."
+                  : "Newest scans appear first. Click any row to open complete scan details."}
               </p>
             </div>
 
@@ -792,7 +830,7 @@ export default function App() {
                             )}
                           </td>
 
-                          <td className="p-3">{scan?.image_data?.factory_location || "-"}</td>
+                          <td className="p-3">{getLocationLabel(scan?.image_data?.factory_location)}</td>
                           <td className="p-3">{scan?.image_data?.camera || "-"}</td>
                         </tr>
                       );
