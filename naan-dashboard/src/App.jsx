@@ -25,12 +25,6 @@ function getImageUrl(scan) {
   );
 }
 
-function getResultColor(result) {
-  return result === "OK"
-    ? "text-green-600 bg-green-50"
-    : "text-red-600 bg-red-50";
-}
-
 function compactNumber(value) {
   const num = Number(value ?? 0);
   return new Intl.NumberFormat("en-IN").format(num);
@@ -175,7 +169,7 @@ function DetailRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-b-0">
       <span className="min-w-[120px] text-sm font-medium text-slate-500">{label}</span>
-      <span className="text-right text-sm font-semibold text-slate-900 break-all">
+      <span className="break-all text-right text-sm font-semibold text-slate-900">
         {value ?? "-"}
       </span>
     </div>
@@ -183,19 +177,34 @@ function DetailRow({ label, value }) {
 }
 
 function Modal({ scan, onClose }) {
+  useEffect(() => {
+    if (!scan) return;
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [scan, onClose]);
+
   if (!scan) return null;
 
   const imageUrl = getImageUrl(scan);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <h2 className="text-xl font-bold text-slate-900">Scan Details</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {scan.scan_id || scan.id}
-            </p>
+            <p className="mt-1 text-sm text-slate-500">{scan.scan_id || scan.id}</p>
           </div>
           <button
             onClick={onClose}
@@ -221,16 +230,18 @@ function Modal({ scan, onClose }) {
 
             <div className="mt-4 flex flex-wrap gap-3">
               <span
-                className={`rounded-full px-3 py-1 text-sm font-semibold ${getResultColor(
-                  scan.result
-                )}`}
+                className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                  scan.result === "OK"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
+                }`}
               >
                 {scan.result || "-"}
               </span>
               <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">
                 {scan.defect_type || "None"}
               </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold capitalize text-slate-700">
                 {scan?.image_data?.view_type || "-"}
               </span>
             </div>
@@ -242,19 +253,31 @@ function Modal({ scan, onClose }) {
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl bg-white p-3 text-center shadow-sm">
                   <div className="text-xs text-slate-500">Hair</div>
-                  <div className={`mt-2 rounded-full px-2 py-1 text-xs font-semibold ${statusPill(!!scan?.module_status?.hair)}`}>
+                  <div
+                    className={`mt-2 rounded-full px-2 py-1 text-xs font-semibold ${statusPill(
+                      !!scan?.module_status?.hair
+                    )}`}
+                  >
                     {scan?.module_status?.hair ? "ON" : "OFF"}
                   </div>
                 </div>
                 <div className="rounded-xl bg-white p-3 text-center shadow-sm">
                   <div className="text-xs text-slate-500">Overcooked</div>
-                  <div className={`mt-2 rounded-full px-2 py-1 text-xs font-semibold ${statusPill(!!scan?.module_status?.overcooked)}`}>
+                  <div
+                    className={`mt-2 rounded-full px-2 py-1 text-xs font-semibold ${statusPill(
+                      !!scan?.module_status?.overcooked
+                    )}`}
+                  >
                     {scan?.module_status?.overcooked ? "ON" : "OFF"}
                   </div>
                 </div>
                 <div className="rounded-xl bg-white p-3 text-center shadow-sm">
                   <div className="text-xs text-slate-500">Shape</div>
-                  <div className={`mt-2 rounded-full px-2 py-1 text-xs font-semibold ${statusPill(!!scan?.module_status?.shape)}`}>
+                  <div
+                    className={`mt-2 rounded-full px-2 py-1 text-xs font-semibold ${statusPill(
+                      !!scan?.module_status?.shape
+                    )}`}
+                  >
                     {scan?.module_status?.shape ? "ON" : "OFF"}
                   </div>
                 </div>
@@ -287,13 +310,62 @@ function Modal({ scan, onClose }) {
               <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-600">
                 Device Info
               </h3>
-              <DetailRow label="CPU" value={scan?.device_info?.cpu_percent != null ? `${scan.device_info.cpu_percent}%` : "-"} />
-              <DetailRow label="RAM" value={scan?.device_info?.ram_percent != null ? `${scan.device_info.ram_percent}%` : "-"} />
-              <DetailRow label="RAM Used" value={scan?.device_info?.ram_used_gb != null ? `${scan.device_info.ram_used_gb} GB` : "-"} />
-              <DetailRow label="RAM Total" value={scan?.device_info?.ram_total_gb != null ? `${scan.device_info.ram_total_gb} GB` : "-"} />
-              <DetailRow label="Disk" value={scan?.device_info?.disk_percent != null ? `${scan.device_info.disk_percent}%` : "-"} />
-              <DetailRow label="Disk Used" value={scan?.device_info?.disk_used_gb != null ? `${scan.device_info.disk_used_gb} GB` : "-"} />
-              <DetailRow label="Disk Total" value={scan?.device_info?.disk_total_gb != null ? `${scan.device_info.disk_total_gb} GB` : "-"} />
+              <DetailRow
+                label="CPU"
+                value={
+                  scan?.device_info?.cpu_percent != null
+                    ? `${scan.device_info.cpu_percent}%`
+                    : "-"
+                }
+              />
+              <DetailRow
+                label="RAM"
+                value={
+                  scan?.device_info?.ram_percent != null
+                    ? `${scan.device_info.ram_percent}%`
+                    : "-"
+                }
+              />
+              <DetailRow
+                label="RAM Used"
+                value={
+                  scan?.device_info?.ram_used_gb != null
+                    ? `${scan.device_info.ram_used_gb} GB`
+                    : "-"
+                }
+              />
+              <DetailRow
+                label="RAM Total"
+                value={
+                  scan?.device_info?.ram_total_gb != null
+                    ? `${scan.device_info.ram_total_gb} GB`
+                    : "-"
+                }
+              />
+              <DetailRow
+                label="Disk"
+                value={
+                  scan?.device_info?.disk_percent != null
+                    ? `${scan.device_info.disk_percent}%`
+                    : "-"
+                }
+              />
+              <DetailRow
+                label="Disk Used"
+                value={
+                  scan?.device_info?.disk_used_gb != null
+                    ? `${scan.device_info.disk_used_gb} GB`
+                    : "-"
+                }
+              />
+              <DetailRow
+                label="Disk Total"
+                value={
+                  scan?.device_info?.disk_total_gb != null
+                    ? `${scan.device_info.disk_total_gb} GB`
+                    : "-"
+                }
+              />
             </div>
 
             <div className="mt-4 rounded-2xl bg-slate-50 p-4">
@@ -321,11 +393,83 @@ function Modal({ scan, onClose }) {
   );
 }
 
+function ScanGridCard({ scan, onOpen }) {
+  const imageUrl = getImageUrl(scan);
+
+  return (
+    <button
+      onClick={() => onOpen(scan)}
+      className="overflow-hidden rounded-2xl bg-white text-left shadow-md transition hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      <div className="relative">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={scan.defect_type || "scan"}
+            className="h-56 w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-56 items-center justify-center bg-slate-100 text-sm text-slate-400">
+            No Image
+          </div>
+        )}
+
+        <div className="absolute left-3 top-3 flex gap-2">
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              scan.result === "OK"
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {scan.result || "-"}
+          </span>
+
+          <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-semibold capitalize text-slate-700 backdrop-blur">
+            {scan?.image_data?.view_type || "-"}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-4">
+        <div>
+          <div className="text-sm font-bold text-slate-900">
+            {scan.defect_type || "None"}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {formatDateTime(scan.timestamp)}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Location</div>
+            <div className="mt-1 font-semibold text-slate-800">
+              {scan?.image_data?.factory_location || "-"}
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Camera</div>
+            <div className="mt-1 font-semibold text-slate-800">
+              {scan?.image_data?.camera || "-"}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+          Click to view full details
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function App() {
   const [scans, setScans] = useState([]);
   const [selectedScan, setSelectedScan] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState("All");
   const [selectedView, setSelectedView] = useState("All");
+  const [viewMode, setViewMode] = useState("grid");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [usingDummy, setUsingDummy] = useState(false);
@@ -484,6 +628,34 @@ export default function App() {
                 </select>
               </div>
 
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-600">
+                  View Mode
+                </label>
+                <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                      viewMode === "grid"
+                        ? "bg-blue-600 text-white"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Grid
+                  </button>
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                      viewMode === "table"
+                        ? "bg-blue-600 text-white"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Table
+                  </button>
+                </div>
+              </div>
+
               <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Data Mode
@@ -501,71 +673,81 @@ export default function App() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 mb-6">
-            <div className="bg-white p-6 rounded-2xl shadow-md hover:shadow-lg transition">
+          <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="rounded-2xl bg-white p-6 shadow-md transition hover:shadow-lg">
               <p className="text-gray-500">Captured Images</p>
               <h2 className="text-3xl font-bold">{compactNumber(total)}</h2>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-md hover:shadow-lg transition">
+            <div className="rounded-2xl bg-white p-6 shadow-md transition hover:shadow-lg">
               <p className="text-gray-500">Rejected Images</p>
               <h2 className="text-3xl font-bold text-red-500">{compactNumber(rejected)}</h2>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-md hover:shadow-lg transition">
+            <div className="rounded-2xl bg-white p-6 shadow-md transition hover:shadow-lg">
               <p className="text-gray-500">Rejection %</p>
               <h2 className="text-3xl font-bold">{rejectionPercent}%</h2>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-yellow-400 hover:shadow-lg transition">
-              <p className="text-gray-500 text-sm">Hair</p>
-              <h2 className="text-2xl font-bold mt-2">{compactNumber(defects.Hair)}</h2>
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border-l-4 border-yellow-400 bg-white p-5 shadow-md transition hover:shadow-lg">
+              <p className="text-sm text-gray-500">Hair</p>
+              <h2 className="mt-2 text-2xl font-bold">{compactNumber(defects.Hair)}</h2>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-red-400 hover:shadow-lg transition">
-              <p className="text-gray-500 text-sm">Overcooked</p>
-              <h2 className="text-2xl font-bold mt-2">{compactNumber(defects.Overcooked)}</h2>
+            <div className="rounded-2xl border-l-4 border-red-400 bg-white p-5 shadow-md transition hover:shadow-lg">
+              <p className="text-sm text-gray-500">Overcooked</p>
+              <h2 className="mt-2 text-2xl font-bold">{compactNumber(defects.Overcooked)}</h2>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-blue-400 hover:shadow-lg transition">
-              <p className="text-gray-500 text-sm">Shape</p>
-              <h2 className="text-2xl font-bold mt-2">{compactNumber(defects.Shape)}</h2>
+            <div className="rounded-2xl border-l-4 border-blue-400 bg-white p-5 shadow-md transition hover:shadow-lg">
+              <p className="text-sm text-gray-500">Shape</p>
+              <h2 className="mt-2 text-2xl font-bold">{compactNumber(defects.Shape)}</h2>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+          <div className="overflow-hidden rounded-2xl bg-white shadow-md">
             <div className="border-b border-slate-200 bg-blue-50 px-5 py-4">
               <h2 className="text-lg font-bold text-slate-800">Inspection Records</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Click any row to open complete scan details
+                {viewMode === "grid"
+                  ? "Click any card to open complete scan details"
+                  : "Click any row to open complete scan details"}
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-blue-50">
-                  <tr>
-                    <th className="p-3 text-center font-semibold text-slate-700">Date/Time</th>
-                    <th className="p-3 text-center font-semibold text-slate-700">Result</th>
-                    <th className="p-3 text-center font-semibold text-slate-700">Defect Type</th>
-                    <th className="p-3 text-center font-semibold text-slate-700">View</th>
-                    <th className="p-3 text-center font-semibold text-slate-700">Image</th>
-                    <th className="p-3 text-center font-semibold text-slate-700">Location</th>
-                    <th className="p-3 text-center font-semibold text-slate-700">Camera</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredScans.length === 0 ? (
+            {filteredScans.length === 0 ? (
+              <div className="p-10 text-center text-slate-500">No Data Available</div>
+            ) : viewMode === "grid" ? (
+              <div className="p-5">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  {filteredScans.map((scan) => (
+                    <ScanGridCard
+                      key={scan.id}
+                      scan={scan}
+                      onOpen={setSelectedScan}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-blue-50">
                     <tr>
-                      <td colSpan="7" className="p-6 text-center text-slate-500">
-                        No Data Available
-                      </td>
+                      <th className="p-3 text-center font-semibold text-slate-700">Date/Time</th>
+                      <th className="p-3 text-center font-semibold text-slate-700">Result</th>
+                      <th className="p-3 text-center font-semibold text-slate-700">Defect Type</th>
+                      <th className="p-3 text-center font-semibold text-slate-700">View</th>
+                      <th className="p-3 text-center font-semibold text-slate-700">Image</th>
+                      <th className="p-3 text-center font-semibold text-slate-700">Location</th>
+                      <th className="p-3 text-center font-semibold text-slate-700">Camera</th>
                     </tr>
-                  ) : (
-                    filteredScans.map((scan) => {
+                  </thead>
+
+                  <tbody>
+                    {filteredScans.map((scan) => {
                       const img = getImageUrl(scan);
 
                       return (
@@ -614,11 +796,11 @@ export default function App() {
                           <td className="p-3">{scan?.image_data?.camera || "-"}</td>
                         </tr>
                       );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </div>
