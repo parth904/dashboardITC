@@ -67,6 +67,55 @@ function statusPill(on) {
     : "bg-red-100 text-red-700";
 }
 
+function isScanWithinRange(scan, rangeKey) {
+  if (rangeKey === "total") return true;
+
+  const ts = getTimestampMs(scan?.timestamp);
+  if (!ts) return false;
+
+  const scanDate = new Date(ts);
+  const now = new Date();
+
+  if (rangeKey === "today") {
+    return (
+      scanDate.getFullYear() === now.getFullYear() &&
+      scanDate.getMonth() === now.getMonth() &&
+      scanDate.getDate() === now.getDate()
+    );
+  }
+
+  if (rangeKey === "this_week") {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const currentDay = today.getDay(); // 0=Sun
+    const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - diffToMonday);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    return scanDate >= weekStart && scanDate < weekEnd;
+  }
+
+  if (rangeKey === "this_month") {
+    return (
+      scanDate.getFullYear() === now.getFullYear() &&
+      scanDate.getMonth() === now.getMonth()
+    );
+  }
+
+  return true;
+}
+
+function getRangeLabel(rangeKey) {
+  if (rangeKey === "today") return "Today";
+  if (rangeKey === "this_week") return "This Week";
+  if (rangeKey === "this_month") return "This Month";
+  return "Total";
+}
+
 const DUMMY_SCANS = [
   {
     id: "scan_demo_001",
@@ -503,6 +552,7 @@ export default function App() {
   const [selectedScan, setSelectedScan] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState("All");
   const [selectedView, setSelectedView] = useState("All");
+  const [selectedRange, setSelectedRange] = useState("today");
   const [viewMode, setViewMode] = useState("grid");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -511,8 +561,7 @@ export default function App() {
   useEffect(() => {
     const q = query(
       collection(db, "inspections"),
-      orderBy("timestamp", "desc"),
-      limit(100)
+      orderBy("timestamp", "desc")
     );
 
     const unsub = onSnapshot(
@@ -572,11 +621,13 @@ export default function App() {
         selectedView === "All" ||
         scan?.image_data?.view_type === selectedView;
 
-      return locationOk && viewOk;
+      const rangeOk = isScanWithinRange(scan, selectedRange);
+
+      return locationOk && viewOk && rangeOk;
     });
 
     return sortScansNewestFirst(result);
-  }, [scans, selectedLocation, selectedView]);
+  }, [scans, selectedLocation, selectedView, selectedRange]);
 
   const total = filteredScans.length;
 
@@ -632,6 +683,22 @@ export default function App() {
             </div>
 
             <div className="flex flex-col gap-3 md:flex-row">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-600">
+                  Time Filter
+                </label>
+                <select
+                  value={selectedRange}
+                  onChange={(e) => setSelectedRange(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                >
+                  <option value="today">Today</option>
+                  <option value="this_week">This Week</option>
+                  <option value="this_month">This Month</option>
+                  <option value="total">Total</option>
+                </select>
+              </div>
+
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-600">
                   Location
@@ -710,6 +777,10 @@ export default function App() {
               Firebase fallback active: {error}
             </div>
           ) : null}
+
+          <div className="mb-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
+            Showing data for: {getRangeLabel(selectedRange)}
+          </div>
 
           <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="rounded-2xl bg-white p-6 shadow-md transition hover:shadow-lg">
