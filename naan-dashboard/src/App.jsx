@@ -41,7 +41,7 @@ function sortScansNewestFirst(items) {
 }
 
 function getLocationLabel(value) {
-  if (!value || value === "Unknown") return "Ahmedabad";
+  if (!value || value === "Unknown") return "Unknown";
   return value;
 }
 
@@ -67,53 +67,23 @@ function statusPill(on) {
     : "bg-red-100 text-red-700";
 }
 
-function isScanWithinRange(scan, rangeKey) {
-  if (rangeKey === "total") return true;
+function isSameDay(ms, targetDate) {
+    const d1 = new Date(ms);
+    const d2 = new Date(targetDate);
 
-  const ts = getTimestampMs(scan?.timestamp);
-  if (!ts) return false;
-
-  const scanDate = new Date(ts);
-  const now = new Date();
-
-  if (rangeKey === "today") {
     return (
-      scanDate.getFullYear() === now.getFullYear() &&
-      scanDate.getMonth() === now.getMonth() &&
-      scanDate.getDate() === now.getDate()
+        d1.toLocaleDateString() === d2.toLocaleDateString()
     );
-  }
-
-  if (rangeKey === "this_week") {
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const currentDay = today.getDay(); // 0=Sun
-    const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
-
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - diffToMonday);
-    weekStart.setHours(0, 0, 0, 0);
-
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-
-    return scanDate >= weekStart && scanDate < weekEnd;
-  }
-
-  if (rangeKey === "this_month") {
-    return (
-      scanDate.getFullYear() === now.getFullYear() &&
-      scanDate.getMonth() === now.getMonth()
-    );
-  }
-
-  return true;
 }
 
-function getRangeLabel(rangeKey) {
-  if (rangeKey === "today") return "Today";
-  if (rangeKey === "this_week") return "This Week";
-  if (rangeKey === "this_month") return "This Month";
-  return "Total";
+function isToday(ts) {
+    return isSameDay(ts, new Date());
+}
+
+function isYesterday(ts) {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    return isSameDay(ts, y);
 }
 
 const DUMMY_SCANS = [
@@ -552,7 +522,8 @@ export default function App() {
   const [selectedScan, setSelectedScan] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState("All");
   const [selectedView, setSelectedView] = useState("All");
-  const [selectedRange, setSelectedRange] = useState("today");
+  const [dateFilter, setDateFilter] = useState("today");
+  const [selectedDate, setSelectedDate] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -572,13 +543,11 @@ export default function App() {
           ...doc.data(),
         }));
 
-        const sortedData = sortScansNewestFirst(data);
-
-        if (sortedData.length === 0) {
+        if (data.length === 0) {
           setScans(sortScansNewestFirst(DUMMY_SCANS));
           setUsingDummy(true);
         } else {
-          setScans(sortedData);
+          setScans(data);
           setUsingDummy(false);
         }
 
@@ -613,26 +582,38 @@ export default function App() {
 
   const filteredScans = useMemo(() => {
     const result = scans.filter((scan) => {
-      const locationOk =
-        selectedLocation === "All" ||
-        getLocationLabel(scan?.image_data?.factory_location) === selectedLocation;
+        const ts = getTimestampMs(scan?.timestamp);
 
-      const viewOk =
-        selectedView === "All" ||
-        scan?.image_data?.view_type === selectedView;
+        const locationOk =
+            selectedLocation === "All" ||
+            getLocationLabel(scan?.image_data?.factory_location) === selectedLocation;
 
-      const rangeOk = isScanWithinRange(scan, selectedRange);
+        const viewOk =
+            selectedView === "All" ||
+            scan?.image_data?.view_type === selectedView;
 
-      return locationOk && viewOk && rangeOk;
+        let dateOk = true;
+
+        if (dateFilter === "today") {
+            dateOk = isToday(ts);
+        } else if (dateFilter === "yesterday") {
+            dateOk = isYesterday(ts);
+        } else if (dateFilter === "custom") {
+            dateOk = selectedDate ? isSameDay(ts, new Date(selectedDate)) : false;
+        } else if (dateFilter === "all") {
+            dateOk = true;
+        }
+
+        return locationOk && viewOk && dateOk;
     });
 
     return sortScansNewestFirst(result);
-  }, [scans, selectedLocation, selectedView, selectedRange]);
+}, [scans, selectedLocation, selectedView, dateFilter, selectedDate]);
 
   const total = filteredScans.length;
 
   const rejected = useMemo(() => {
-    return filteredScans.filter((d) => d.result === "NOT OK").length;
+    return filteredScans.filter((scan) => scan?.result === "NOT OK").length;
   }, [filteredScans]);
 
   const rejectionPercent = total ? ((rejected / total) * 100).toFixed(1) : "0.0";
@@ -640,18 +621,10 @@ export default function App() {
   const defects = useMemo(() => {
     const defectMap = { Hair: 0, Overcooked: 0, Shape: 0 };
 
-    filteredScans.forEach((d) => {
-      if (d.defect_type === "Hair") defectMap.Hair++;
-      if (d.defect_type === "Overcooked") defectMap.Overcooked++;
-      if (d.defect_type === "Shape") defectMap.Shape++;
-
-      if (Array.isArray(d.defect_types)) {
-        d.defect_types.forEach((type) => {
-          if (type === "Hair") defectMap.Hair++;
-          if (type === "Overcooked") defectMap.Overcooked++;
-          if (type === "Shape") defectMap.Shape++;
-        });
-      }
+    filteredScans.forEach((scan) => {
+        if (scan?.defects?.hair) defectMap.Hair++;
+        if (scan?.defects?.overcooked) defectMap.Overcooked++;
+        if (scan?.defects?.shape) defectMap.Shape++;
     });
 
     return defectMap;
@@ -685,22 +658,6 @@ export default function App() {
             <div className="flex flex-col gap-3 md:flex-row">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-600">
-                  Time Filter
-                </label>
-                <select
-                  value={selectedRange}
-                  onChange={(e) => setSelectedRange(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                >
-                  <option value="today">Today</option>
-                  <option value="this_week">This Week</option>
-                  <option value="this_month">This Month</option>
-                  <option value="total">Total</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-600">
                   Location
                 </label>
                 <select
@@ -731,6 +688,30 @@ export default function App() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-600">
+                  Date Filter
+                </label>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                >
+                  <option value="all">All Time</option>
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {dateFilter === "custom" && (
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                  />
+                )}
               </div>
 
               <div>
@@ -771,16 +752,12 @@ export default function App() {
               </div>
             </div>
           </div>
-
+          {/* CHEVK */}
           {error ? (
             <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm">
               Firebase fallback active: {error}
             </div>
           ) : null}
-
-          <div className="mb-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
-            Showing data for: {getRangeLabel(selectedRange)}
-          </div>
 
           <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="rounded-2xl bg-white p-6 shadow-md transition hover:shadow-lg">
